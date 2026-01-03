@@ -1,2 +1,13 @@
+# Node/Electron build artifacts
+node_modules
+dist
+dist-electron
+.dist
+.dist-electron
+
+# Editors
+.vscode
+.idea
+.DS_Store
 StreamViewer.jar
 .idea/
