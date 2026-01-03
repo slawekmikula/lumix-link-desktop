@@ -5,7 +5,7 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite dev --host\" \"wait-on http-get://localhost:5173 && cross-env ELECTRON_DISABLE_SANDBOX=true NODE_OPTIONS=--loader=ts-node/esm TS_NODE_PROJECT=electron/tsconfig.json electron electron/main.ts\"",
+    "dev": "concurrently -k \"vite dev --host\" \"tsc -w -p electron/tsconfig.json\" \"wait-on http-get://localhost:5173 dist-electron/main.js && cross-env ELECTRON_DISABLE_SANDBOX=true electron dist-electron/main.js\"",
     "build": "vite build && tsc -p electron/tsconfig.json",
     "start": "electron dist-electron/main.js",
     "dist": "npm run build && electron-builder --linux --win"

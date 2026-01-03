@@ -6,6 +6,7 @@ let mainWindow: BrowserWindow | null = null;
 let miniWindow: BrowserWindow | null = null;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -15,7 +16,7 @@ function createMainWindow() {
     minHeight: 640,
     backgroundColor: '#0b1e2d',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -47,7 +48,7 @@ function createMiniWindow() {
     title: 'Lumix Quick Controls',
     backgroundColor: '#0b1e2d',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
