@@ -28,7 +28,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return `http://${cameraIp}:49199`;
   },
   getState: async () => callCamera('/cam.cgi', { mode: 'getstate' }),
-  sendSetting: async (type: string, value: string) => callCamera('/cam.cgi', { mode: 'setsetting', type, value }),
+  sendSetting: async (type: string, value: string, value2?: string) => {
+    const params: Record<string, string> = { mode: 'setsetting', type, value };
+    if (value2 !== undefined) params.value2 = value2;
+    return callCamera('/cam.cgi', params);
+  },
+  getSetting: async (type: string) => callCamera('/cam.cgi', { mode: 'getsetting', type }),
+  getInfo: async (type: string) => callCamera('/cam.cgi', { mode: 'getinfo', type }),
+  camCommand: async (value: string) => callCamera('/cam.cgi', { mode: 'camcmd', value }),
+  camControl: async (type: string, value: string) => callCamera('/cam.cgi', { mode: 'camctrl', type, value }),
   triggerShutter: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'capture' }),
   startRecording: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'video_recstart' }),
   stopRecording: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'video_recstop' }),

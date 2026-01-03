@@ -149,3 +149,54 @@ button.danger {
   place-items: center;
   font-size: 16px;
 }
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.tab-btn {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #1e3550;
+  background: #0b1e2d;
+  color: #e8f0ff;
+}
+
+.tab-btn.active {
+  border-color: #3b6fb0;
+  background: #1a3c63;
+  box-shadow: 0 6px 18px rgba(59, 111, 176, 0.35);
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  font-size: 12px;
+}
+
+.kv-row {
+  display: contents;
+}
+
+.kv-key {
+  color: #8bd0ff;
+}
+
+.kv-value {
+  color: #e8f0ff;
+  word-break: break-all;
+}
+
+.muted {
+  color: #6c8bb3;
+  font-size: 13px;
+}
+
+.focus-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
