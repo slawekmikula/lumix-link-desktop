@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CameraState } from './types';
 
 type XmlEntry = { path: string; value: string };
@@ -124,7 +124,7 @@ const getInfoTypes = ['capability', 'allmenu', 'curmenu', 'lens'];
 
 function parseState(raw: string | null): CameraState {
   if (!raw) return { raw, recording: false };
-  const recording = raw.includes('video_rec=on');
+  const recording = raw.includes('video_rec=on') || raw.includes('<rec>on</rec>');
   return { raw, recording };
 }
 
@@ -170,8 +170,23 @@ function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
 }
 
 function App() {
-  const [cameraIp, setCameraIp] = useState('192.168.0.1');
+  const [cameraIp, setCameraIp] = useState('192.168.80.151');
   const [netmask, setNetmask] = useState('24');
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const removeListener = window.electronAPI.onStreamFrame((base64) => {
+      if (imgRef.current) {
+        imgRef.current.src = `data:image/jpeg;base64,${base64}`;
+      }
+    });
+
+    return () => {
+      removeListener();
+      window.electronAPI.stopUdpListener();
+    };
+  }, []);
+
   const [status, setStatus] = useState<string>('Not connected');
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [state, setState] = useState<CameraState>({ raw: null, recording: false });
@@ -206,12 +221,21 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!streamUrl) return;
+    // Camera needs periodic commands to keep the stream alive (watchdog)
+    // We poll getstate every 3 seconds
+    const interval = setInterval(refreshState, 3000);
+    return () => clearInterval(interval);
+  }, [streamUrl]);
+
   const connect = async () => {
     setLoading(true);
     setError(null);
     try {
-      const stream = await window.electronAPI.startStream();
-      setStreamUrl(stream);
+      await window.electronAPI.startStream();
+      await window.electronAPI.startUdpListener();
+      setStreamUrl('UDP Stream Active');
       setStatus(`Connected to ${cameraIp}/${netmask}`);
       await refreshState();
     } catch (err) {
@@ -219,6 +243,28 @@ function App() {
       setStatus('Connection failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await window.electronAPI.stopUdpListener();
+      setStreamUrl(null);
+      setStatus('Not connected');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleConnection = () => {
+    if (streamUrl) {
+      disconnect();
+    } else {
+      connect();
     }
   };
 
@@ -322,6 +368,32 @@ function App() {
     setFocusTimer(timer);
   };
 
+  const shootingRef = useRef(false);
+
+  const stopShooting = () => {
+    shootingRef.current = false;
+    quickCamCommand('capture_cancel');
+  };
+
+  const startShooting = () => {
+    if (shootingRef.current) return;
+    shootingRef.current = true;
+    const loop = async () => {
+      if (!shootingRef.current) return;
+      await quickCamCommand('capture');
+      if (!shootingRef.current) {
+        quickCamCommand('capture_cancel');
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      await quickCamCommand('capture_cancel');
+      if (!shootingRef.current) return;
+      await new Promise((r) => setTimeout(r, 500));
+      if (shootingRef.current) loop();
+    };
+    loop();
+  };
+
   const stateEntries = useMemo(() => xmlToEntries(state.raw), [state.raw]);
 
   const renderSettingSelect = (
@@ -379,6 +451,71 @@ function App() {
     window.electronAPI.mini.open();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F3 - Connect / Disconnect
+      if (e.key === 'F3') {
+        e.preventDefault();
+        toggleConnection();
+      }
+      // F4 - Refresh Status
+      else if (e.key === 'F4') {
+        e.preventDefault();
+        refreshState();
+      }
+      // F5 - Take photo
+      else if (e.key === 'F5') {
+        e.preventDefault();
+        triggerShutter();
+      }
+      // F6 - Start recording
+      else if (e.key === 'F6') {
+        e.preventDefault();
+        (async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await window.electronAPI.startRecording();
+            await refreshState();
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }
+      // F7 - Stop recording
+      else if (e.key === 'F7') {
+        e.preventDefault();
+        (async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await window.electronAPI.stopRecording();
+            await refreshState();
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }
+      // F9 - Enter rec mode
+      else if (e.key === 'F9') {
+        e.preventDefault();
+        setMode('recmode');
+      }
+      // F10 - Enter play mode
+      else if (e.key === 'F10') {
+        e.preventDefault();
+        setMode('playmode');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [triggerShutter, refreshState, setMode, toggleConnection]);
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -407,8 +544,12 @@ function App() {
                 <span>Netmask</span>
                 <input value={netmask} onChange={(e) => setNetmask(e.target.value)} />
               </label>
-              <button onClick={connect} disabled={loading}>
-                {loading ? 'Connecting…' : 'Connect & Start Stream'}
+              <button onClick={toggleConnection} disabled={loading}>
+                {loading
+                  ? 'Working…'
+                  : streamUrl
+                  ? 'Disconnect & Stop Stream (F3)'
+                  : 'Connect & Start Stream (F3)'}
               </button>
               <div className="status">{status}</div>
               {error && <div className="error">{error}</div>}
@@ -417,8 +558,8 @@ function App() {
             <div className="card">
               <h2>Camera Mode</h2>
               <div className="actions">
-                <button onClick={() => setMode('recmode')} disabled={loading}>Set Rec Mode</button>
-                <button onClick={() => setMode('playmode')} disabled={loading}>Set Play Mode</button>
+                <button onClick={() => setMode('recmode')} disabled={loading}>Set Rec Mode (F9)</button>
+                <button onClick={() => setMode('playmode')} disabled={loading}>Set Play Mode (F10)</button>
               </div>
             </div>
 
@@ -434,12 +575,12 @@ function App() {
             <div className="card">
               <h2>Shooting</h2>
               <div className="actions">
-                <button onClick={triggerShutter} disabled={loading}>Take Photo</button>
+                <button onClick={triggerShutter} disabled={loading}>Take Photo (F5)</button>
                 <button onClick={toggleRecord} disabled={loading} className={state.recording ? 'danger' : ''}>
-                  {state.recording ? 'Stop Recording' : 'Start Recording'}
+                  {state.recording ? 'Stop Recording (F7)' : 'Start Recording (F6)'}
                 </button>
                 <button onClick={openMini}>Open Mini Panel</button>
-                <button onClick={refreshState} disabled={loading}>Refresh Status</button>
+                <button onClick={refreshState} disabled={loading}>Refresh Status (F4)</button>
               </div>
               <pre className="state">{state.raw || 'state: n/a'}</pre>
             </div>
@@ -558,7 +699,11 @@ function App() {
             <div className="card">
               <h2>(Continuous) Shooting</h2>
               <div className="actions">
-                <button onMouseDown={() => quickCamCommand('capture')} onMouseUp={() => quickCamCommand('capture_cancel')}>
+                <button
+                  onMouseDown={startShooting}
+                  onMouseUp={stopShooting}
+                  onMouseLeave={stopShooting}
+                >
                   Hold to shoot
                 </button>
                 <button onClick={() => quickCamCommand('capture_cancel')}>Stop</button>
@@ -578,7 +723,7 @@ function App() {
         </div>
         {previewUrl ? (
           <div className="preview-frame">
-            <img src={previewUrl} alt="Live stream" />
+            <img ref={imgRef} alt="Live stream" />
           </div>
         ) : (
           <div className="preview-placeholder">Start stream to view live feed</div>

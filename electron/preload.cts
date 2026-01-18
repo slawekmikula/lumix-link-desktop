@@ -10,11 +10,8 @@ async function callCamera(path: string, params?: Record<string, string>) {
       url.searchParams.append(k, v);
     }
   }
-  const response = await fetch(url.toString(), { method: 'GET' });
-  if (!response.ok) {
-    throw new Error(`Camera call failed: ${response.status}`);
-  }
-  return response.text();
+  // Use IPC to perform the request in the main process to bypass CORS
+  return await ipcRenderer.invoke('camera-request', url.toString());
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -26,6 +23,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     await callCamera('/cam.cgi', { mode: 'camcmd', value: 'recmode' });
     await callCamera('/cam.cgi', { mode: 'startstream', value: '49199' });
     return `http://${cameraIp}:49199`;
+  },
+  startUdpListener: () => ipcRenderer.invoke('start-udp-listener'),
+  stopUdpListener: () => ipcRenderer.invoke('stop-udp-listener'),
+  onStreamFrame: (callback: (base64: string) => void) => {
+    const subscription = (_event: any, value: string) => callback(value);
+    ipcRenderer.on('stream-frame', subscription);
+    return () => {
+        ipcRenderer.removeListener('stream-frame', subscription);
+    };
   },
   getState: async () => callCamera('/cam.cgi', { mode: 'getstate' }),
   sendSetting: async (type: string, value: string, value2?: string) => {

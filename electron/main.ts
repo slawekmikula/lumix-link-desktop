@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import url from 'node:url';
+import dgram from 'node:dgram';
 
 let mainWindow: BrowserWindow | null = null;
 let miniWindow: BrowserWindow | null = null;
+let udpSocket: dgram.Socket | null = null;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -80,6 +82,87 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+ipcMain.handle('camera-request', async (_event, url: string) => {
+  try {
+    // Uses Node.js native fetch which bypasses CORS
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.statusText}`);
+    }
+    return await response.text();
+  } catch (error) {
+    console.error('Camera request failed:', error);
+    throw error;
+  }
+});
+
+function getImageDataStart(udpData: Buffer): number {
+  let videoDataStart = 130;
+  // The image data starts somewhere after the first 130 bytes, but at last in 320 bytes
+  const limit = Math.min(320, udpData.length - 1);
+  for (let k = 130; k < limit; k++) {
+    // The bytes FF and D8 signify the start of the jpeg data
+    if (udpData[k] === 0xFF && udpData[k + 1] === 0xD8) {
+      videoDataStart = k;
+    }
+  }
+  return videoDataStart;
+}
+
+ipcMain.handle('start-udp-listener', () => {
+  if (udpSocket) {
+    try {
+      udpSocket.close();
+    } catch (e) {
+      console.error('Error closing existing socket:', e);
+    }
+    udpSocket = null;
+  }
+
+  try {
+    udpSocket = dgram.createSocket('udp4');
+    
+    udpSocket.on('error', (err) => {
+      console.error(`UDP socket error:\n${err.stack}`);
+      if (udpSocket) udpSocket.close();
+      udpSocket = null;
+    });
+
+    udpSocket.on('message', (msg, rinfo) => {
+      // Process only packets around expected size if needed, or just try to decode all
+      // The Java code mentions packets are normally 25k-30k bytes
+      
+      try {
+        const start = getImageDataStart(msg);
+        const imageBuffer = msg.subarray(start);
+        const base64Image = imageBuffer.toString('base64');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('stream-frame', base64Image);
+        }
+      } catch (err) {
+        console.error('Error processing UDP packet', err);
+      }
+    });
+
+    udpSocket.bind(49199, () => {
+        console.log('UDP Socket bound to port 49199');
+    });
+
+    return true;
+  } catch (e) {
+    console.error('Failed to create UDP socket', e);
+    return false;
+  }
+});
+
+ipcMain.handle('stop-udp-listener', () => {
+  if (udpSocket) {
+    udpSocket.close();
+    udpSocket = null;
+    console.log('UDP Socket closed');
   }
 });
 

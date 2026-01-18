@@ -8,6 +8,9 @@ declare global {
     electronAPI: {
       setCameraIp(ip: string): void;
       startStream(): Promise<string>;
+      startUdpListener(): Promise<void>;
+      stopUdpListener(): Promise<void>;
+      onStreamFrame(callback: (base64: string) => void): () => void;
       getState(): Promise<string>;
       sendSetting(type: string, value: string, value2?: string): Promise<string>;
       getSetting(type: string): Promise<string>;
