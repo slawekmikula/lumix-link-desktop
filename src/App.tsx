@@ -185,6 +185,15 @@ function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
   );
 }
 
+function formatDuration(secondsStr: string | undefined): string {
+  if (!secondsStr) return '-';
+  const sec = parseInt(secondsStr, 10);
+  if (isNaN(sec)) return secondsStr;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m ${s}s`;
+}
+
 function App() {
   const [cameraIp, setCameraIp] = useState('192.168.80.151');
   const [netmask, setNetmask] = useState('24');
@@ -576,6 +585,8 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [triggerShutter, refreshState, setMode, toggleConnection]);
 
+  const getValue = (path: string) => stateEntries.find((e) => e.path === path)?.value || '-';
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -618,21 +629,16 @@ function App() {
             </div>
 
             <div className="card">
-              <h2>Camera Mode</h2>
-              <div className="actions">
-                <button onClick={() => setMode('recmode')} disabled={loading}>Set Rec Mode (F9)</button>
-                <button onClick={() => setMode('playmode')} disabled={loading}>Set Play Mode (F10)</button>
-              </div>
-            </div>
-
-            <div className="card">
               <h2>Shooting</h2>
               <div className="actions">
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button style={{ flex: 1 }} onClick={() => setMode('recmode')} disabled={loading} title="F9">Rec Mode</button>
+                  <button style={{ flex: 1 }} onClick={() => setMode('playmode')} disabled={loading} title="F10">Play Mode</button>
+                </div>
                 <button onClick={triggerShutter} disabled={loading}>Take Photo (F5)</button>
                 <button onClick={toggleRecord} disabled={loading} className={state.recording ? 'danger' : ''}>
                   {state.recording ? 'Stop Recording (F7)' : 'Start Recording (F6)'}
                 </button>
-                <button onClick={openMini}>Open Mini Panel</button>
                 <button onClick={refreshState} disabled={loading}>Refresh Status (F4)</button>
               </div>
               <pre className="state">{state.raw || 'state: n/a'}</pre>
@@ -640,24 +646,23 @@ function App() {
 
             <div className="card">
               <h2>Exposure</h2>
-              {renderSettingSelect('Shutter', shutterOptions, (v) => applySetting('shtrspeed', v), 'shtrspeed')}
-              {renderSettingSelect('Aperture', focalPresets, (v) => applySetting('focal', v), 'focal')}
-              {renderSettingSelect('ISO', isoPresets, (v) => applySetting('iso', v), 'iso')}
-              {renderSettingSelect('White balance', wbModes, (v) => applySetting('whitebalance', v), 'whitebalance')}
-              {renderSettingSelect('AF mode', afModes, (v) => applySetting('afmode', v), 'afmode')}
-            </div>
-
-            <div className="card">
-              <h2>Shooting</h2>
-              <div className="actions">
-                <button onClick={triggerShutter} disabled={loading}>Take Photo (F5)</button>
-                <button onClick={toggleRecord} disabled={loading} className={state.recording ? 'danger' : ''}>
-                  {state.recording ? 'Stop Recording (F7)' : 'Start Recording (F6)'}
-                </button>
-                <button onClick={openMini}>Open Mini Panel</button>
-                <button onClick={refreshState} disabled={loading}>Refresh Status (F4)</button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Shutter', shutterOptions, (v) => applySetting('shtrspeed', v), 'shtrspeed')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Aperture', focalPresets, (v) => applySetting('focal', v), 'focal')}
+                </div>
               </div>
-              <pre className="state">{state.raw || 'state: n/a'}</pre>
+              {renderSettingSelect('ISO', isoPresets, (v) => applySetting('iso', v), 'iso')}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('White balance', wbModes, (v) => applySetting('whitebalance', v), 'whitebalance')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('AF mode', afModes, (v) => applySetting('afmode', v), 'afmode')}
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -792,9 +797,15 @@ function App() {
         <div className="preview-header">
           <div>
             <h2>Live Preview</h2>
-            <p>Port 49199 stream</p>
+            <p className="stream-info">
+              <span>🔋 {getValue('state/batt')}</span>
+              {' · '}
+              <span>📷 {getValue('state/remaincapacity')}</span>
+              {' · '}
+              <span>📹 {formatDuration(getValue('state/video_remaincapacity'))}</span>
+            </p>
           </div>
-          <button onClick={refreshState} disabled={loading}>Refresh Status</button>
+          <button onClick={openMini}>Mini Panel</button>
         </div>
         {previewUrl ? (
           <div className="preview-frame">

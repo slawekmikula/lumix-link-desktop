@@ -2,8 +2,16 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 let cameraIp: string | null = null;
 
-async function callCamera(path: string, params?: Record<string, string>) {
+async function ensureCameraIp() {
+  if (!cameraIp) {
+    cameraIp = await ipcRenderer.invoke('get-camera-ip');
+  }
   if (!cameraIp) throw new Error('Camera IP not set');
+  return cameraIp;
+}
+
+async function callCamera(path: string, params?: Record<string, string>) {
+  await ensureCameraIp();
   const url = new URL(path, `http://${cameraIp}`);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -17,9 +25,10 @@ async function callCamera(path: string, params?: Record<string, string>) {
 contextBridge.exposeInMainWorld('electronAPI', {
   setCameraIp: (ip: string) => {
     cameraIp = ip;
+    ipcRenderer.invoke('set-camera-ip', ip);
   },
   startStream: async () => {
-    if (!cameraIp) throw new Error('Camera IP not set');
+    await ensureCameraIp();
     await callCamera('/cam.cgi', { mode: 'camcmd', value: 'recmode' });
     await callCamera('/cam.cgi', { mode: 'startstream', value: '49199' });
     return `http://${cameraIp}:49199`;

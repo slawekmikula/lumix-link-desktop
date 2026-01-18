@@ -6,6 +6,7 @@ import dgram from 'node:dgram';
 let mainWindow: BrowserWindow | null = null;
 let miniWindow: BrowserWindow | null = null;
 let udpSocket: dgram.Socket | null = null;
+let currentCameraIp: string | null = null;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -44,17 +45,23 @@ function createMiniWindow() {
 
   miniWindow = new BrowserWindow({
     width: 320,
-    height: 220,
+    height: 135,
     alwaysOnTop: true,
     frame: true,
     title: 'Lumix Quick Controls',
     backgroundColor: '#0b1e2d',
+    autoHideMenuBar: true,
+    minimizable: false,
+    maximizable: false,
+    type: 'utility',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
+
+  miniWindow.setMenu(null);
 
   const target = process.env.NODE_ENV === 'development'
     ? `${VITE_DEV_SERVER_URL}/mini.html`
@@ -177,4 +184,13 @@ ipcMain.handle('mini.close', () => {
     miniWindow = null;
   }
   return true;
+});
+
+ipcMain.handle('set-camera-ip', (_event, ip: string) => {
+  currentCameraIp = ip;
+  return true;
+});
+
+ipcMain.handle('get-camera-ip', () => {
+  return currentCameraIp;
 });
