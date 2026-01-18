@@ -281,7 +281,14 @@ function App() {
       'focal',
       'iso',
       'whitebalance',
-      'afmode'
+      'afmode',
+      'lightmetering',
+      'colormode',
+      'aspectratio',
+      'pictsize',
+      'quality',
+      'videoquality',
+      'videorectime',
     ];
     
     const newSettings: Record<string, string> = {};
@@ -732,19 +739,61 @@ function App() {
           <>
             <div className="card">
               <h2>Set… (Extended)</h2>
-              {renderSettingSelect('Shutter Speed', shutterOptions, (v) => applySetting('shtrspeed', v))}
-              {renderSettingSelect('Aperture', focalPresets, (v) => applySetting('focal', v))}
-              {renderSettingSelect('ISO', isoPresets, (v) => applySetting('iso', v))}
-              {renderSettingSelect('AF Mode', afModes, (v) => applySetting('afmode', v))}
-              {renderSettingSelect('Light metering', lightMetering, (v) => applySetting('lightmetering', v))}
-              {renderSettingSelect('Color mode', colorModes, (v) => applySetting('colormode', v))}
-              {renderSettingSelect('Aspect ratio', aspectRatios, (v) => applySetting('aspectratio', v))}
-              {renderSettingSelect('Picture size', pictureSizes, (v) => applySetting('pictsize', v))}
-              {renderSettingSelect('Picture quality', pictureQualities, (v) => applySetting('quality', v))}
-              {renderSettingSelect('Video quality', videoQualities, (v) => applySetting('videoquality', v))}
-              {renderSettingSelect('Video rectime', videoRectimes, (v) => applySetting('videorectime', v))}
-              {renderSettingSelect('White balance', wbModes, (v) => applySetting('whitebalance', v))}
-              {renderSettingSelect('Color temperature', colorTemps, (v) => applySetting('whitebalance', 'color_temp', v))}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Shutter Speed', shutterOptions, (v) => applySetting('shtrspeed', v), 'shtrspeed')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Aperture', focalPresets, (v) => applySetting('focal', v), 'focal')}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('ISO', isoPresets, (v) => applySetting('iso', v), 'iso')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('AF Mode', afModes, (v) => applySetting('afmode', v), 'afmode')}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Light metering', lightMetering, (v) => applySetting('lightmetering', v), 'lightmetering')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Color mode', colorModes, (v) => applySetting('colormode', v), 'colormode')}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Aspect ratio', aspectRatios, (v) => applySetting('aspectratio', v), 'aspectratio')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Picture size', pictureSizes, (v) => applySetting('pictsize', v), 'pictsize')}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Picture quality', pictureQualities, (v) => applySetting('quality', v), 'quality')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Video rectime', videoRectimes, (v) => applySetting('videorectime', v), 'videorectime')}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('White balance', wbModes, (v) => applySetting('whitebalance', v), 'whitebalance')}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {renderSettingSelect('Color temperature', colorTemps, (v) => applySetting('whitebalance', 'color_temp', v))}
+                </div>
+              </div>
+
+              {renderSettingSelect('Video quality', videoQualities, (v) => applySetting('videoquality', v), 'videoquality')}
             </div>
           </>
         )}
@@ -754,10 +803,14 @@ function App() {
             <div className="card">
               <h2>Zoom</h2>
               <div className="actions">
-                <button onClick={() => quickCamCommand('wide-fast')}>Wide · Fast</button>
-                <button onClick={() => quickCamCommand('wide-normal')}>Wide · Slow</button>
-                <button onClick={() => quickCamCommand('tele-normal')}>Tele · Slow</button>
-                <button onClick={() => quickCamCommand('tele-fast')}>Tele · Fast</button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button style={{ flex: 1 }} onClick={() => quickCamCommand('wide-fast')}>Wide · Fast</button>
+                  <button style={{ flex: 1 }} onClick={() => quickCamCommand('tele-fast')}>Tele · Fast</button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button style={{ flex: 1 }} onClick={() => quickCamCommand('wide-normal')}>Wide · Slow</button>                  
+                  <button style={{ flex: 1 }} onClick={() => quickCamCommand('tele-normal')}>Tele · Slow</button>
+                </div>
                 <button onClick={() => quickCamCommand('zoomstop')}>Stop</button>
               </div>
             </div>
@@ -773,6 +826,13 @@ function App() {
                   Wide · Fast
                 </button>
                 <button
+                  onMouseDown={() => startFocusRepeat('tele-fast', 400)}
+                  onMouseUp={stopFocusRepeat}
+                  onMouseLeave={stopFocusRepeat}
+                >
+                  Tele · Fast
+                </button>
+                <button
                   onMouseDown={() => startFocusRepeat('wide-normal', 200)}
                   onMouseUp={stopFocusRepeat}
                   onMouseLeave={stopFocusRepeat}
@@ -786,13 +846,7 @@ function App() {
                 >
                   Tele · Slow
                 </button>
-                <button
-                  onMouseDown={() => startFocusRepeat('tele-fast', 400)}
-                  onMouseUp={stopFocusRepeat}
-                  onMouseLeave={stopFocusRepeat}
-                >
-                  Tele · Fast
-                </button>
+                
               </div>
             </div>
 
