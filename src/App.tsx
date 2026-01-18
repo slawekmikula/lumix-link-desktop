@@ -94,6 +94,9 @@ const focalPresets = [
   { label: 'f/13', value: '1878/256' },
   { label: 'f/14', value: '1963/256' },
   { label: 'f/16', value: '2048/256' },
+  { label: 'f/18', value: '2133/256' },
+  { label: 'f/20', value: '2219/256' },
+  { label: 'f/22', value: '2304/256' },
 ];
 
 const lightMetering = ['center', 'spot', 'multi'];
@@ -162,7 +165,19 @@ function parseSettingValue(raw: string | null, type: string): string | null {
     if (doc.querySelector('parsererror')) return null;
     const sv = doc.querySelector('settingvalue');
     if (sv && sv.hasAttribute(type)) {
-      return sv.getAttribute(type);
+      let val = sv.getAttribute(type);
+      // Fix specific aperture value issues where camera returns slightly different values
+      if (type === 'focal' && val) {
+        // f/4.5
+        if (val === '1109/256' || val === '1111/256') val = '1110/256';
+        // f/6.3
+        if (val === '1365/256' || val === '1367/256') val = '1366/256';
+        // f/9
+        if (val === '1621/256' || val === '1623/256') val = '1622/256';
+        // f/13
+        if (val === '1877/256' || val === '1879/256') val = '1878/256';
+      }
+      return val;
     }
     return null;
   } catch (err) {
@@ -214,6 +229,11 @@ function App() {
 
   const [status, setStatus] = useState<string>('Not connected');
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [fitMode, setFitMode] = useState<'contain' | 'cover'>('contain'); // 'contain' acts as 'fit to width', 'cover' will be our 'fit to height' logic or custom
+  // actually user asked for "fill width" (current) vs "fill height"
+  // Let's use specific names
+  const [viewMode, setViewMode] = useState<'width' | 'height'>('width');
+  
   const [state, setState] = useState<CameraState>({ raw: null, recording: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -805,11 +825,37 @@ function App() {
               <span>📹 {formatDuration(getValue('state/video_remaincapacity'))}</span>
             </p>
           </div>
-          <button onClick={openMini}>Mini Panel</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setViewMode(m => m === 'width' ? 'height' : 'width')}>
+              {viewMode === 'width' ? 'Fit Height' : 'Fit Width'}
+            </button>
+            <button onClick={openMini}>Mini Panel</button>
+          </div>
         </div>
         {previewUrl ? (
-          <div className="preview-frame">
-            <img ref={imgRef} alt="Live stream" />
+          <div 
+            className="preview-frame"
+            style={viewMode === 'height' ? { 
+              height: 'calc(100vh - 140px)', 
+              minHeight: 0, 
+              width: 'auto',
+              aspectRatio: '4/3', /* Optional, helps centering */
+              margin: '0 auto'
+            } : {}}
+          >
+            <img 
+              ref={imgRef} 
+              alt="Live stream" 
+              style={viewMode === 'height' ? {
+                width: 'auto',
+                height: '100%',
+                objectFit: 'contain'
+              } : { 
+                width: '100%', 
+                height: 'auto', 
+                objectFit: 'contain' 
+              }}
+            />
           </div>
         ) : (
           <div className="preview-placeholder">Start stream to view live feed</div>
