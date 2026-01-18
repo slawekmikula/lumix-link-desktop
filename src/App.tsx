@@ -155,6 +155,22 @@ function xmlToEntries(raw: string | null): XmlEntry[] {
   }
 }
 
+function parseSettingValue(raw: string | null, type: string): string | null {
+  if (!raw) return null;
+  try {
+    const doc = new DOMParser().parseFromString(raw, 'application/xml');
+    if (doc.querySelector('parsererror')) return null;
+    const sv = doc.querySelector('settingvalue');
+    if (sv && sv.hasAttribute(type)) {
+      return sv.getAttribute(type);
+    }
+    return null;
+  } catch (err) {
+    console.error('xml parse failed', err);
+    return null;
+  }
+}
+
 function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
   if (!entries.length) return <div className="muted">No data</div>;
   return (
@@ -200,6 +216,7 @@ function App() {
   const [settingEntries, setSettingEntries] = useState<XmlEntry[]>([]);
   const [infoEntries, setInfoEntries] = useState<XmlEntry[]>([]);
   const [focusTimer, setFocusTimer] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [camSettings, setCamSettings] = useState<Record<string, string>>({});
 
   const previewUrl = useMemo(() => {
     if (!streamUrl) return null;
@@ -229,6 +246,33 @@ function App() {
     return () => clearInterval(interval);
   }, [streamUrl]);
 
+  const fetchCamSettings = async () => {
+    const settingsToFetch = [
+      'shtrspeed',
+      'focal',
+      'iso',
+      'whitebalance',
+      'afmode'
+    ];
+    
+    const newSettings: Record<string, string> = {};
+    
+    // Process sequentially to avoid overwhelming the camera
+    for (const type of settingsToFetch) {
+      try {
+        const res = await window.electronAPI.getSetting(type);
+        const val = parseSettingValue(res, type);
+        if (val !== null) {
+          newSettings[type] = val;
+        }
+      } catch (err) {
+        console.error(`Failed to fetch setting ${type}`, err);
+      }
+    }
+    
+    setCamSettings(prev => ({ ...prev, ...newSettings }));
+  };
+
   const connect = async () => {
     setLoading(true);
     setError(null);
@@ -238,6 +282,7 @@ function App() {
       setStreamUrl('UDP Stream Active');
       setStatus(`Connected to ${cameraIp}/${netmask}`);
       await refreshState();
+      await fetchCamSettings();
     } catch (err) {
       setError((err as Error).message);
       setStatus('Connection failed');
@@ -274,6 +319,16 @@ function App() {
     try {
       await window.electronAPI.sendSetting(type, value, value2);
       await refreshState();
+
+      // Update local state (optimistic or fetch confirmation)
+      setCamSettings(prev => ({ ...prev, [type]: value }));
+      
+      // confirm from camera
+      const res = await window.electronAPI.getSetting(type);
+      const val = parseSettingValue(res, type);
+      if (val) {
+        setCamSettings(prev => ({ ...prev, [type]: val }));
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -400,26 +455,31 @@ function App() {
     label: string,
     options: { label: string; value: string }[] | string[],
     onSelect: (value: string) => void,
+    controlKey?: string,
   ) => {
     const normalized = options.map((opt) =>
       typeof opt === 'string' ? { label: opt, value: opt } : opt,
     );
 
+    const val = controlKey ? camSettings[controlKey] : undefined;
+
     return (
       <label className="field">
         <span>{label}</span>
         <select
-          defaultValue=""
+          value={val !== undefined ? val : ''}
           onChange={(e) => {
             const v = e.target.value;
             if (!v) return;
             onSelect(v);
-            e.target.value = '';
+            if (controlKey === undefined) e.target.value = '';
           }}
         >
-          <option value="" disabled>
-            select…
-          </option>
+          {val === undefined && (
+            <option value="" disabled>
+              select…
+            </option>
+          )}
           {normalized.map((opt) => (
             <option key={`${opt.label}-${opt.value}`} value={opt.value}>
               {opt.label}
@@ -536,14 +596,16 @@ function App() {
           <>
             <div className="card">
               <h2>Connection</h2>
-              <label className="field">
-                <span>Camera IP</span>
-                <input value={cameraIp} onChange={(e) => setCameraIp(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Netmask</span>
-                <input value={netmask} onChange={(e) => setNetmask(e.target.value)} />
-              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <label className="field" style={{ flex: 1 }}>
+                  <span>Camera IP</span>
+                  <input value={cameraIp} onChange={(e) => setCameraIp(e.target.value)} />
+                </label>
+                <label className="field" style={{ width: '80px' }}>
+                  <span>Netmask</span>
+                  <input value={netmask} onChange={(e) => setNetmask(e.target.value)} />
+                </label>
+              </div>
               <button onClick={toggleConnection} disabled={loading}>
                 {loading
                   ? 'Working…'
@@ -564,12 +626,25 @@ function App() {
             </div>
 
             <div className="card">
+              <h2>Shooting</h2>
+              <div className="actions">
+                <button onClick={triggerShutter} disabled={loading}>Take Photo (F5)</button>
+                <button onClick={toggleRecord} disabled={loading} className={state.recording ? 'danger' : ''}>
+                  {state.recording ? 'Stop Recording (F7)' : 'Start Recording (F6)'}
+                </button>
+                <button onClick={openMini}>Open Mini Panel</button>
+                <button onClick={refreshState} disabled={loading}>Refresh Status (F4)</button>
+              </div>
+              <pre className="state">{state.raw || 'state: n/a'}</pre>
+            </div>
+
+            <div className="card">
               <h2>Exposure</h2>
-              {renderSettingSelect('Shutter', shutterOptions, (v) => applySetting('shtrspeed', v))}
-              {renderSettingSelect('Aperture', focalPresets, (v) => applySetting('focal', v))}
-              {renderSettingSelect('ISO', isoPresets, (v) => applySetting('iso', v))}
-              {renderSettingSelect('White balance', wbModes, (v) => applySetting('whitebalance', v))}
-              {renderSettingSelect('AF mode', afModes, (v) => applySetting('afmode', v))}
+              {renderSettingSelect('Shutter', shutterOptions, (v) => applySetting('shtrspeed', v), 'shtrspeed')}
+              {renderSettingSelect('Aperture', focalPresets, (v) => applySetting('focal', v), 'focal')}
+              {renderSettingSelect('ISO', isoPresets, (v) => applySetting('iso', v), 'iso')}
+              {renderSettingSelect('White balance', wbModes, (v) => applySetting('whitebalance', v), 'whitebalance')}
+              {renderSettingSelect('AF mode', afModes, (v) => applySetting('afmode', v), 'afmode')}
             </div>
 
             <div className="card">
