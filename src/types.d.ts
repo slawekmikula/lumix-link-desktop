@@ -20,6 +20,9 @@ declare global {
       triggerShutter(): Promise<string>;
       startRecording(): Promise<string>;
       stopRecording(): Promise<string>;
+      getLibraryContents(): Promise<string>;
+      getThumbnail(contentId: string): Promise<string>;
+      downloadGeneric(contentId: string, fileName: string): Promise<string>;
       mini: {
         open(): Promise<boolean>;
         close(): Promise<boolean>;

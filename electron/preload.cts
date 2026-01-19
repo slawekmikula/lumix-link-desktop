@@ -55,6 +55,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   triggerShutter: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'capture' }),
   startRecording: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'video_recstart' }),
   stopRecording: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'video_recstop' }),
+  getLibraryContents: async () => callCamera('/cam.cgi', { mode: 'get_content_list' }),
+  getThumbnail: async (contentId: string) => {
+    await ensureCameraIp();
+    return await ipcRenderer.invoke('get-thumbnail', cameraIp, contentId);
+  },
+  downloadGeneric: async (contentId: string, fileName: string) => {
+      await ensureCameraIp();
+      const url = new URL('/cam.cgi', `http://${cameraIp}`);
+      url.searchParams.append('mode', 'get_content');
+      url.searchParams.append('content_id', contentId);
+      return await ipcRenderer.invoke('download-file', url.toString(), fileName);
+  },
   mini: {
     open: () => ipcRenderer.invoke('mini.open'),
     close: () => ipcRenderer.invoke('mini.close'),

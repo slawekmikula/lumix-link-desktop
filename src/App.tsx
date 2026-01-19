@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CameraState } from './types';
+import { Library } from './Library';
 
 type XmlEntry = { path: string; value: string };
 
@@ -210,6 +211,7 @@ function formatDuration(secondsStr: string | undefined): string {
 }
 
 function App() {
+  const [showLibrary, setShowLibrary] = useState(false);
   const [cameraIp, setCameraIp] = useState('192.168.80.151');
   const [netmask, setNetmask] = useState('24');
   const imgRef = useRef<HTMLImageElement>(null);
@@ -870,7 +872,8 @@ function App() {
       <main className="preview">
         <div className="preview-header">
           <div>
-            <h2>Live Preview</h2>
+            <h2>{showLibrary ? 'Media Library' : 'Live Preview'}</h2>
+            {!showLibrary && (
             <p className="stream-info">
               <span>🔋 {getValue('state/batt')}</span>
               {' · '}
@@ -878,15 +881,21 @@ function App() {
               {' · '}
               <span>📹 {formatDuration(getValue('state/video_remaincapacity'))}</span>
             </p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            {!showLibrary && (
             <button onClick={() => setViewMode(m => m === 'width' ? 'height' : 'width')}>
               {viewMode === 'width' ? 'Fit Height' : 'Fit Width'}
             </button>
+            )}
+            <button onClick={() => setShowLibrary(s => !s)}>{showLibrary ? 'Back' : 'Library'}</button>
             <button onClick={openMini}>Mini Panel</button>
           </div>
         </div>
-        {previewUrl ? (
+        {showLibrary ? (
+            <Library />
+        ) : previewUrl ? (
           <div 
             className="preview-frame"
             style={viewMode === 'height' ? { 
