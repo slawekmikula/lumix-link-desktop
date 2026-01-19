@@ -3,6 +3,8 @@ export interface CameraState {
   recording: boolean;
 }
 
+export type XmlEntry = { path: string; value: string };
+
 declare global {
   interface Window {
     electronAPI: {

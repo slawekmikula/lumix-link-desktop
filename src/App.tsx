@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CameraState } from './types';
+import type { CameraState, XmlEntry } from './types';
+import { parseState, xmlToEntries, formatDuration } from './utils';
 import { Library } from './Library';
-
-type XmlEntry = { path: string; value: string };
 
 const tabs = [
   { id: 'main', label: 'Main' },
@@ -126,38 +125,6 @@ const colorTemps = ['2500', '3000', '3500', '4000', '4500', '5000', '5500', '600
 const getSettingTypes = ['afmode', 'focusmode', 'mf_asst', 'mf_asst_mag', 'ex_tele_conv', 'colormode'];
 const getInfoTypes = ['capability', 'allmenu', 'curmenu', 'lens'];
 
-function parseState(raw: string | null): CameraState {
-  if (!raw) return { raw, recording: false };
-  const recording = raw.includes('video_rec=on') || raw.includes('<rec>on</rec>');
-  return { raw, recording };
-}
-
-function xmlToEntries(raw: string | null): XmlEntry[] {
-  if (!raw) return [];
-  try {
-    const doc = new DOMParser().parseFromString(raw, 'application/xml');
-    if (doc.querySelector('parsererror')) return [];
-    const entries: XmlEntry[] = [];
-
-    const walk = (node: Element, path: string) => {
-      const childElements = Array.from(node.children) as Element[];
-      if (childElements.length === 0) {
-        entries.push({ path, value: node.textContent || '' });
-        return;
-      }
-      childElements.forEach((child) => {
-        const nextPath = path ? `${path}/${child.nodeName}` : child.nodeName;
-        walk(child, nextPath);
-      });
-    };
-
-    walk(doc.documentElement, '');
-    return entries;
-  } catch (err) {
-    console.error('xml parse failed', err);
-    return [];
-  }
-}
 
 function parseSettingValue(raw: string | null, type: string): string | null {
   if (!raw) return null;
@@ -201,14 +168,6 @@ function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
   );
 }
 
-function formatDuration(secondsStr: string | undefined): string {
-  if (!secondsStr) return '-';
-  const sec = parseInt(secondsStr, 10);
-  if (isNaN(sec)) return secondsStr;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${s}s`;
-}
 
 function App() {
   const [showLibrary, setShowLibrary] = useState(false);

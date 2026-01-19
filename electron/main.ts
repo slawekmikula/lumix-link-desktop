@@ -47,7 +47,7 @@ function createMiniWindow() {
 
   miniWindow = new BrowserWindow({
     width: 320,
-    height: 135,
+    height: 175,
     alwaysOnTop: true,
     frame: true,
     title: 'Lumix Quick Controls',

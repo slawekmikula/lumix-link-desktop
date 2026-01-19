@@ -1,16 +1,23 @@
 import { createRoot } from 'react-dom/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './mini.css';
+import { parseState, xmlToEntries, formatDuration } from './utils';
 
 function MiniApp() {
-  const [recording, setRecording] = useState(false);
+  const [stateRaw, setStateRaw] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const parsedState = useMemo(() => parseState(stateRaw), [stateRaw]);
+  const recording = parsedState.recording;
+  
+  const stateEntries = useMemo(() => xmlToEntries(stateRaw), [stateRaw]);
+  const getValue = (path: string) => stateEntries.find((e) => e.path === path)?.value || '-';
+
   const refresh = async () => {
     try {
-      const state = await window.electronAPI.getState();
-      setRecording(state.includes('video_rec=on'));
+      const raw = await window.electronAPI.getState();
+      setStateRaw(raw);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -18,6 +25,8 @@ function MiniApp() {
 
   useEffect(() => {
     refresh();
+    const interval = setInterval(refresh, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const snap = async () => {
@@ -42,7 +51,8 @@ function MiniApp() {
       } else {
         await window.electronAPI.startRecording();
       }
-      await refresh();
+      // Trigger a refresh shortly after to pick up the change
+      setTimeout(refresh, 1000);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -60,6 +70,13 @@ function MiniApp() {
         </button>
       </div>
       <div className="status">{recording ? 'Recording' : 'Idle'}</div>
+      
+      <div className="stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', fontSize: '13px', paddingTop: '8px', borderTop: '1px solid #1a3c5a', marginTop: '4px' }}>
+          <span title="Battery">🔋 {getValue('state/batt')}</span>
+          <span title="Photos Remaining">📷 {getValue('state/remaincapacity')}</span>
+          <span title="Video Time Remaining">📹 {formatDuration(getValue('state/video_remaincapacity'))}</span>
+      </div>
+
       {error && <div className="error">{error}</div>}
     </div>
   );
