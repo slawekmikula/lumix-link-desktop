@@ -23,6 +23,8 @@ declare global {
       startRecording(): Promise<string>;
       stopRecording(): Promise<string>;
       getLibraryContents(): Promise<string>;
+      getContentInfo(): Promise<string>;
+      browseDlna(objectId: string, start: number, count: number): Promise<string>;
       getThumbnail(contentId: string): Promise<string>;
       downloadGeneric(contentId: string, fileName: string): Promise<string>;
       mini: {

@@ -19,7 +19,27 @@ async function callCamera(path: string, params?: Record<string, string>) {
     }
   }
   // Use IPC to perform the request in the main process to bypass CORS
-  return await ipcRenderer.invoke('camera-request', url.toString());
+  try {
+    return await ipcRenderer.invoke('camera-request', url.toString());
+  } catch (error: any) {
+    if (error.message && error.message.includes('fetch failed')) {
+      throw new Error('Could not connect to the device');
+    }
+    throw error;
+  }
+}
+
+async function callDlna(action: string, body: string) {
+  await ensureCameraIp();
+  const url = `http://${cameraIp}:60606/Server0/CDS_control`;
+  return await ipcRenderer.invoke('camera-request', url, {
+    method: 'POST',
+    headers: {
+      'SOAPAction': action,
+      'Content-Type': 'text/xml; charset="utf-8"'
+    },
+    body
+  });
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -56,6 +76,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startRecording: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'video_recstart' }),
   stopRecording: async () => callCamera('/cam.cgi', { mode: 'camcmd', value: 'video_recstop' }),
   getLibraryContents: async () => callCamera('/cam.cgi', { mode: 'get_content_list' }),
+  getContentInfo: async () => callCamera('/cam.cgi', { mode: 'get_content_info' }),
+  browseDlna: async (objectId: string, start: number = 0, count: number = 30) => {
+    const body = `<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+<u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+<ObjectID>${objectId}</ObjectID>
+<BrowseFlag>BrowseDirectChildren</BrowseFlag>
+<Filter>*</Filter>
+<StartingIndex>${start}</StartingIndex>
+<RequestedCount>${count}</RequestedCount>
+<SortCriteria></SortCriteria>
+</u:Browse>
+</s:Body>
+</s:Envelope>`;
+    return callDlna('"urn:schemas-upnp-org:service:ContentDirectory:1#Browse"', body);
+  },
   getThumbnail: async (contentId: string) => {
     await ensureCameraIp();
     return await ipcRenderer.invoke('get-thumbnail', cameraIp, contentId);

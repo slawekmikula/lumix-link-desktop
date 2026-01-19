@@ -94,20 +94,23 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('camera-request', async (_event, url: string) => {
+ipcMain.handle('camera-request', async (_event, url: string, options: any = {}) => {
   try {
     // Uses Node.js native fetch which bypasses CORS
     const response = await fetch(url, {
+      method: options.method || 'GET',
       headers: {
         'User-Agent': 'Panasonic Image App',
+        ...(options.headers || {}),
       },
+      body: options.body,
     });
     if (!response.ok) {
-      throw new Error(`Request failed: ${response.statusText}`);
+      throw new Error(`Request failed: ${response.statusText} (${response.status}) for ${url}`);
     }
     return await response.text();
   } catch (error) {
-    console.error('Camera request failed:', error);
+    console.error(`Camera request failed for ${url}:`, error);
     throw error;
   }
 });

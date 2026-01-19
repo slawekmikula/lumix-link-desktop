@@ -16,41 +16,94 @@ export function Library() {
 
   const fetchLibrary = async () => {
     setLoading(true);
-    setStatusMsg('Fetching list...');
+    setStatusMsg('Preparing...');
+    const parser = new DOMParser();
+
     try {
-      const xmlStr = await window.electronAPI.getLibraryContents();
-      console.log('Library XML:', xmlStr);
-      
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
+      // 1. Switch to Play Mode
+      setStatusMsg('Switching to Play Mode...');
+      await window.electronAPI.camCommand('playmode');
+      await new Promise(r => setTimeout(r, 800)); // Delay to let mode switch happen
+
+      // 2. Get State/Content Info
+      setStatusMsg('Checking content info...');
+      try {
+        await window.electronAPI.getState(); // Refresh state
+      } catch (e) {
+         console.warn(e);
+      }
+
+      let total = 0;
+      try {
+        const infoRaw = await window.electronAPI.getContentInfo();
+        // Parse infoRaw to get count
+        // <camrply><total_content_number>38</total_content_number>...</camrply>
+        const infoDoc = parser.parseFromString(infoRaw, 'text/xml');
+        const totalStr = infoDoc.querySelector('total_content_number')?.textContent;
+        total = totalStr ? parseInt(totalStr, 10) : 0;
+        setStatusMsg(`Found ${total} items via ContentInfo. Fetching DLNA list...`);
+      } catch (err) {
+        console.warn('get_content_info failed, proceeding with blind DLNA browse', err);
+        setStatusMsg('Could not get content count. Trying DLNA browse...');
+      }
       
       const contents: ContentItem[] = [];
-      const contentNodes = xmlDoc.getElementsByTagName('content'); 
-      
-      if (contentNodes.length === 0) {
-        // Try alternate parsing for 'csv' style or debug info
-        setStatusMsg(`No content found. Raw response length: ${xmlStr.length}. Check console.`);
-      } else {
-        setStatusMsg(`Found ${contentNodes.length} items.`);
-      }
+      let start = 0;
+      const batch = 30; // restricted by camera usually
 
-      for (let i = 0; i < contentNodes.length; i++) {
-        const node = contentNodes[i];
-        // Example structure
-        const id = node.getElementsByTagName('content_id')[0]?.textContent || '';
-        const name = node.getElementsByTagName('file_name')[0]?.textContent || 'Unknown';
-        const date = node.getElementsByTagName('created_time')[0]?.textContent || '';
-        const type = name.split('.').pop()?.toLowerCase() || 'dat';
-
-        if (id) {
-          contents.push({ id, filename: name, filetype: type, date });
+      while (true) {
+        setStatusMsg(`Fetching items ${start + 1} - ${start + batch}...`);
+        
+        let soapXml = '';
+        try {
+           soapXml = await window.electronAPI.browseDlna('0', start, batch);
+        } catch (err) {
+           console.error('DLNA Browse failed', err);
+           if (contents.length > 0) break; // If we have some items, keep them
+           throw err; // If first request fails, throw
         }
+        
+        const soapDoc = parser.parseFromString(soapXml, 'text/xml');
+        // Handle namespaced tag names in XML
+        const resultNode = soapDoc.getElementsByTagName('Result')[0] || 
+                           soapDoc.getElementsByTagName('u:Result')[0] || 
+                           soapDoc.querySelector('Result');
+        
+        if (!resultNode || !resultNode.textContent) {
+          console.log('No result in SOAP response');
+          break;
+        }
+
+        const didlXml = resultNode.textContent;
+        const didlDoc = parser.parseFromString(didlXml, 'text/xml');
+        const items = didlDoc.getElementsByTagName('item');
+        
+        if (items.length === 0) break;
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const id = item.getAttribute('id') || '';
+          // dc:title might benamespaced
+          const title = item.getElementsByTagName('dc:title')[0]?.textContent || 
+                        item.getElementsByTagName('title')[0]?.textContent || 'Unknown';
+          const date = item.getElementsByTagName('dc:date')[0]?.textContent || 
+                       item.getElementsByTagName('date')[0]?.textContent || '';
+          const type = title.split('.').pop()?.toLowerCase() || 'dat';
+
+          if (id) {
+             contents.push({ id, filename: title, filetype: type, date });
+          }
+        }
+
+        start += items.length;
+        if (items.length < batch) break; 
+        if (total > 0 && start >= total) break;
       }
-      
+
       setItems(contents);
+      setStatusMsg(`Loaded ${contents.length} items.`);
       
       // Fetch thumbnails
-      // We can do this lazily or all at once. Let's do batches.
       loadThumbnails(contents);
 
     } catch (err) {
