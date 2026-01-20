@@ -133,27 +133,29 @@ ipcMain.handle('camera-request-binary', async (_event, url: string) => {
   }
 });
 
-ipcMain.handle('get-thumbnail', async (_event, cameraIp: string, contentId: string) => {
+ipcMain.handle('get-thumbnail', async (_event, targetUrl: string, cacheKey: string) => {
   try {
     const cacheDir = path.join(app.getPath('userData'), 'thumbnails');
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
     
-    const filePath = path.join(cacheDir, `${contentId}.jpg`);
+    // Ensure cacheKey is safe filename
+    const safeKey = cacheKey.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = path.join(cacheDir, safeKey);
+
     if (fs.existsSync(filePath)) {
       return fs.readFileSync(filePath).toString('base64');
     }
 
-    const url = `http://${cameraIp}/cam.cgi?mode=get_thumbnail&content_id=${contentId}`;
-    const response = await fetch(url, {
+    const response = await fetch(targetUrl, {
       headers: {
         'User-Agent': 'Panasonic Image App',
       },
     });
     if (!response.ok) {
        // if 404 or others, maybe try without cache
-       throw new Error(`Thumbnail fetch failed: ${response.statusText}`);
+       throw new Error(`Thumbnail fetch failed: ${response.statusText} for ${targetUrl}`);
     }
     
     const arrayBuffer = await response.arrayBuffer();

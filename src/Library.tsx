@@ -6,6 +6,7 @@ type ContentItem = {
   filetype: string;
   date: string;
   thumbnail?: string; // Base64
+  originalUrl?: string;
 };
 
 export function Library() {
@@ -84,14 +85,34 @@ export function Library() {
           const item = items[i];
           const id = item.getAttribute('id') || '';
           // dc:title might benamespaced
-          const title = item.getElementsByTagName('dc:title')[0]?.textContent || 
+          let title = item.getElementsByTagName('dc:title')[0]?.textContent || 
                         item.getElementsByTagName('title')[0]?.textContent || 'Unknown';
           const date = item.getElementsByTagName('dc:date')[0]?.textContent || 
                        item.getElementsByTagName('date')[0]?.textContent || '';
+          
+          const upnpClass = item.getElementsByTagName('upnp:class')[0]?.textContent || 
+                            item.getElementsByTagName('class')[0]?.textContent || '';
+          
+          const resNode = item.getElementsByTagName('res')[0];
+          const res = resNode?.textContent || undefined;
+          const protocolInfo = resNode?.getAttribute('protocolInfo') || '';
+
+          // Infer extension if missing in title
+          if (title && !title.includes('.')) {
+            let ext = '';
+            if (protocolInfo.includes('image/jpeg')) ext = 'jpg';
+            else if (protocolInfo.includes('video/mp4')) ext = 'mp4';
+            else if (protocolInfo.includes('video/quicktime')) ext = 'mov';
+            else if (upnpClass.includes('imageItem')) ext = 'jpg';
+            else if (upnpClass.includes('videoItem')) ext = 'mp4';
+            
+            if (ext) title = `${title}.${ext}`;
+          }
+
           const type = title.split('.').pop()?.toLowerCase() || 'dat';
 
           if (id) {
-             contents.push({ id, filename: title, filetype: type, date });
+             contents.push({ id, filename: title, filetype: type, date, originalUrl: res });
           }
         }
 
@@ -118,7 +139,7 @@ export function Library() {
     for (const item of contents) {
       if (item.filetype === 'jpg' || item.filetype === 'mp4' || item.filetype === 'mov') {
         try {
-          const thumbBase64 = await window.electronAPI.getThumbnail(item.id);
+          const thumbBase64 = await window.electronAPI.getThumbnail(item.filename);
           setItems(prev => prev.map(p => p.id === item.id ? { ...p, thumbnail: `data:image/jpeg;base64,${thumbBase64}` } : p));
         } catch (e) {
             console.warn(`Failed to fetch thumb for ${item.id}`, e);
@@ -130,7 +151,12 @@ export function Library() {
   const handleDownload = async (item: ContentItem) => {
     setDownloading(item.id);
     try {
-      const savedPath = await window.electronAPI.downloadGeneric(item.id, item.filename);
+      // Ensure we are in playmode before downloading
+      await window.electronAPI.camCommand('playmode');
+      // Small delay just in case
+      await new Promise(r => setTimeout(r, 300));
+
+      const savedPath = await window.electronAPI.downloadGeneric(item.id, item.filename, item.originalUrl);
       alert(`Saved to: ${savedPath}`);
     } catch (err) {
       console.error(err);
@@ -164,7 +190,10 @@ export function Library() {
             </div>
             <div style={{ padding: '10px', fontSize: '12px' }}>
                 <div style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.filename}</div>
-                <div style={{ color: '#aaa' }}>{item.date}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#aaa', marginTop: '4px' }}>
+                   <span>{item.date}</span>
+                   <span style={{ textTransform: 'uppercase', fontSize: '10px', background: '#374151', padding: '1px 4px', borderRadius: '3px' }}>{item.filetype}</span>
+                </div>
                 <button 
                   onClick={() => handleDownload(item)} 
                   disabled={downloading === item.id}

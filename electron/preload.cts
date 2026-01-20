@@ -93,16 +93,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 </s:Envelope>`;
     return callDlna('"urn:schemas-upnp-org:service:ContentDirectory:1#Browse"', body);
   },
-  getThumbnail: async (contentId: string) => {
+  getThumbnail: async (fileName: string) => {
     await ensureCameraIp();
-    return await ipcRenderer.invoke('get-thumbnail', cameraIp, contentId);
+    // FileName e.g. "107-0692.JPG" -> transform to "1070692.JPG"
+    const cleanName = fileName.replace(/-/g, '');
+    const url = `http://${cameraIp}:50001/DT${cleanName}`;
+    const cacheKey = `DT${cleanName}`;
+    return await ipcRenderer.invoke('get-thumbnail', url, cacheKey);
   },
-  downloadGeneric: async (contentId: string, fileName: string) => {
+  downloadGeneric: async (contentId: string, fileName: string, customUrl?: string) => {
       await ensureCameraIp();
-      const url = new URL('/cam.cgi', `http://${cameraIp}`);
-      url.searchParams.append('mode', 'get_content');
-      url.searchParams.append('content_id', contentId);
-      return await ipcRenderer.invoke('download-file', url.toString(), fileName);
+      const cleanName = fileName.replace(/-/g, '');
+      const url = `http://${cameraIp}:50001/DL${cleanName}`;
+      return await ipcRenderer.invoke('download-file', url, fileName);
   },
   mini: {
     open: () => ipcRenderer.invoke('mini.open'),

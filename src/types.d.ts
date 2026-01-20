@@ -25,8 +25,8 @@ declare global {
       getLibraryContents(): Promise<string>;
       getContentInfo(): Promise<string>;
       browseDlna(objectId: string, start: number, count: number): Promise<string>;
-      getThumbnail(contentId: string): Promise<string>;
-      downloadGeneric(contentId: string, fileName: string): Promise<string>;
+      getThumbnail(fileName: string): Promise<string>;
+      downloadGeneric(contentId: string, fileName: string, customUrl?: string): Promise<string>;
       mini: {
         open(): Promise<boolean>;
         close(): Promise<boolean>;
