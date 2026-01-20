@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CameraState, XmlEntry } from './types';
 import { parseState, xmlToEntries, formatDuration } from './utils';
-import { Library } from './Library';
+import { useLibrary, LibraryGrid } from './Library';
 
 const tabs = [
   { id: 'main', label: 'Main' },
@@ -170,6 +170,7 @@ function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
 
 
 function App() {
+  const library = useLibrary();
   const [showLibrary, setShowLibrary] = useState(false);
   const [cameraIp, setCameraIp] = useState('192.168.80.151');
   const [netmask, setNetmask] = useState('24');
@@ -831,15 +832,35 @@ function App() {
       <main className="preview">
         <div className="preview-header">
           <div>
-            <h2>{showLibrary ? 'Media Library' : 'Live Preview'}</h2>
-            {!showLibrary && (
-            <p className="stream-info">
-              <span>🔋 {getValue('state/batt')}</span>
-              {' · '}
-              <span>📷 {getValue('state/remaincapacity')}</span>
-              {' · '}
-              <span>📹 {formatDuration(getValue('state/video_remaincapacity'))}</span>
-            </p>
+            <h2>{showLibrary ? "Media Library" : "Live Preview"}</h2>
+            {showLibrary ? (
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <span>{library.statusMsg}</span>
+                <button
+                  onClick={library.fetchLibrary}
+                  disabled={library.loading}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "4px",
+                    background: "#3b82f6",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {library.loading ? "Scanning..." : "Scan Camera"}
+                </button>
+              </div>
+            ) : (
+              <p className="stream-info">
+                <span>🔋 {getValue("state/batt")}</span>
+                {" · "}
+                <span>📷 {getValue("state/remaincapacity")}</span>
+                {" · "}
+                <span>
+                  📹 {formatDuration(getValue("state/video_remaincapacity"))}
+                </span>
+              </p>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -853,7 +874,12 @@ function App() {
           </div>
         </div>
         {showLibrary ? (
-            <Library />
+            <LibraryGrid 
+              items={library.items} 
+              loading={library.loading} 
+              downloading={library.downloading} 
+              handleDownload={library.handleDownload} 
+            />
         ) : previewUrl ? (
           <div 
             className="preview-frame"

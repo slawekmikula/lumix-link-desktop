@@ -103,8 +103,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   downloadGeneric: async (contentId: string, fileName: string, customUrl?: string) => {
       await ensureCameraIp();
-      const cleanName = fileName.replace(/-/g, '');
-      const url = `http://${cameraIp}:50001/DL${cleanName}`;
+      let url = customUrl;
+      
+      if (!url) {
+        // Fallback or explicit construction if customUrl missing
+        const cleanName = fileName.replace(/-/g, '');
+        // We revert to standard path without DL prefix as DL might be a preview/proxy
+        url = `http://${cameraIp}:50001/${cleanName}`;
+      }
+      
       return await ipcRenderer.invoke('download-file', url, fileName);
   },
   mini: {

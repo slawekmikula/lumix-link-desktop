@@ -9,11 +9,24 @@ type ContentItem = {
   originalUrl?: string;
 };
 
-export function Library() {
+export function useLibrary() {
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState('');
+
+  const loadThumbnails = async (contents: ContentItem[]) => {
+    for (const item of contents) {
+      if (item.filetype === 'jpg' || item.filetype === 'mp4' || item.filetype === 'mov') {
+        try {
+          const thumbBase64 = await window.electronAPI.getThumbnail(item.filename);
+          setItems(prev => prev.map(p => p.id === item.id ? { ...p, thumbnail: `data:image/jpeg;base64,${thumbBase64}` } : p));
+        } catch (e) {
+            console.warn(`Failed to fetch thumb for ${item.id}`, e);
+        }
+      }
+    }
+  };
 
   const fetchLibrary = async () => {
     setLoading(true);
@@ -135,21 +148,13 @@ export function Library() {
     }
   };
 
-  const loadThumbnails = async (contents: ContentItem[]) => {
-    for (const item of contents) {
-      if (item.filetype === 'jpg' || item.filetype === 'mp4' || item.filetype === 'mov') {
-        try {
-          const thumbBase64 = await window.electronAPI.getThumbnail(item.filename);
-          setItems(prev => prev.map(p => p.id === item.id ? { ...p, thumbnail: `data:image/jpeg;base64,${thumbBase64}` } : p));
-        } catch (e) {
-            console.warn(`Failed to fetch thumb for ${item.id}`, e);
-        }
-      }
-    }
-  };
-
   const handleDownload = async (item: ContentItem) => {
     setDownloading(item.id);
+    // Start heartbeat to keep camera alive during download
+    const heartbeat = setInterval(() => {
+        window.electronAPI.getState().catch(e => console.warn('Heartbeat failed', e));
+    }, 4000);
+
     try {
       // Ensure we are in playmode before downloading
       await window.electronAPI.camCommand('playmode');
@@ -162,23 +167,25 @@ export function Library() {
       console.error(err);
       alert('Download failed');
     } finally {
+      clearInterval(heartbeat);
       setDownloading(null);
     }
   };
 
-  return (
-    <div style={{ padding: '20px', color: '#fff', height: '100%', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Library</h2>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span>{statusMsg}</span>
-            <button onClick={fetchLibrary} disabled={loading} style={{ padding: '8px 16px', borderRadius: '4px', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer' }}>
-            {loading ? 'Scanning...' : 'Scan Camera'}
-            </button>
-        </div>
-      </div>
+  return { items, loading, downloading, statusMsg, fetchLibrary, handleDownload };
+}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+export function LibraryGrid({ 
+  items, loading, downloading, handleDownload 
+}: { 
+  items: ContentItem[], 
+  loading: boolean, 
+  downloading: string | null, 
+  handleDownload: (item: ContentItem) => void 
+}) {
+  return (
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px', height: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
         {items.map(item => (
           <div key={item.id} style={{ background: '#1e3550', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ height: '120px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -204,13 +211,13 @@ export function Library() {
             </div>
           </div>
         ))}
-      </div>
-      
-      {items.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280' }}>
-          No items found or not scanned yet.
         </div>
-      )}
+      
+        {items.length === 0 && !loading && (
+          <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280' }}>
+            No items found or not scanned yet.
+          </div>
+        )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import url from 'node:url';
 import dgram from 'node:dgram';
 import fs from 'node:fs';
+import http from 'node:http';
 import { pipeline } from 'node:stream/promises';
 
 let mainWindow: BrowserWindow | null = null;
@@ -170,32 +171,49 @@ ipcMain.handle('get-thumbnail', async (_event, targetUrl: string, cacheKey: stri
 });
 
 ipcMain.handle('download-file', async (_event, fileUrl: string, fileName: string) => {
-  try {
-    const picturesPath = app.getPath('pictures');
-    const lumixDir = path.join(picturesPath, 'Lumix');
-    
-    if (!fs.existsSync(lumixDir)) {
-      fs.mkdirSync(lumixDir, { recursive: true });
-    }
+  const picturesPath = app.getPath('pictures');
+  const lumixDir = path.join(picturesPath, 'Lumix');
+  
+  if (!fs.existsSync(lumixDir)) {
+    fs.mkdirSync(lumixDir, { recursive: true });
+  }
 
-    const filePath = path.join(lumixDir, fileName);
-    const response = await fetch(fileUrl, {
+  const filePath = path.join(lumixDir, fileName);
+
+  return new Promise((resolve, reject) => {
+    console.log(`Starting download from ${fileUrl} to ${filePath}`);
+    const req = http.get(fileUrl, {
       headers: {
         'User-Agent': 'Panasonic Image App',
-      },
+      }
+    }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume(); // consume response data to free up memory
+        reject(new Error(`Failed to fetch file: ${res.statusCode} ${res.statusMessage}`));
+        return;
+      }
+
+      const fileStream = fs.createWriteStream(filePath);
+      pipeline(res, fileStream)
+        .then(() => {
+          console.log('Download finished');
+          resolve(filePath);
+        })
+        .catch((err) => {
+          console.error('Pipeline error:', err);
+          fs.unlink(filePath, () => {}); // cleanup
+          reject(err);
+        });
+    });
+
+    req.on('error', (err) => {
+      console.error('Request error:', err);
+      reject(err);
     });
     
-    if (!response.ok) throw new Error(`Failed to fetch file: ${response.statusText}`);
-    if (!response.body) throw new Error('Response body is null');
-
-    // @ts-ignore - node-fetch types mismatch with native fetch, but stream/promises works with Web Streams in Node 18+
-    await pipeline(response.body, fs.createWriteStream(filePath));
-    
-    return filePath;
-  } catch (error) {
-    console.error('Download failed:', error);
-    throw error;
-  }
+    // Disable timeout for large files
+    req.setTimeout(0);
+  });
 });
 
 function getImageDataStart(udpData: Buffer): number {
