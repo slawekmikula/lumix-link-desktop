@@ -172,7 +172,27 @@ function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
 function App() {
   const library = useLibrary();
   const [showLibrary, setShowLibrary] = useState(false);
-  const [cameraIp, setCameraIp] = useState('192.168.80.151');
+  
+  const [ipHistory, setIpHistory] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('lumix_ip_history');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [cameraIp, setCameraIp] = useState(() => {
+    return localStorage.getItem('lumix_last_ip') || '192.168.0.1';
+  });
+
+  const saveIpToHistory = (ip: string) => {
+    const newHistory = [ip, ...ipHistory.filter((i) => i !== ip)].slice(0, 5);
+    setIpHistory(newHistory);
+    localStorage.setItem('lumix_ip_history', JSON.stringify(newHistory));
+    localStorage.setItem('lumix_last_ip', ip);
+  };
+  
   const [netmask, setNetmask] = useState('24');
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -272,6 +292,7 @@ function App() {
   };
 
   const connect = async () => {
+    saveIpToHistory(cameraIp);
     setLoading(true);
     setError(null);
     try {
@@ -599,7 +620,16 @@ function App() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <label className="field" style={{ flex: 1 }}>
                   <span>Camera IP</span>
-                  <input value={cameraIp} onChange={(e) => setCameraIp(e.target.value)} />
+                  <input
+                    value={cameraIp}
+                    onChange={(e) => setCameraIp(e.target.value)}
+                    list="ip-history"
+                  />
+                  <datalist id="ip-history">
+                    {ipHistory.map((ip) => (
+                      <option key={ip} value={ip} />
+                    ))}
+                  </datalist>
                 </label>
                 <label className="field" style={{ width: '80px' }}>
                   <span>Netmask</span>
