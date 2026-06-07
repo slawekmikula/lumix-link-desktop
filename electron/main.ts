@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import path from 'node:path';
 import url from 'node:url';
 import dgram from 'node:dgram';
@@ -10,6 +10,7 @@ let mainWindow: BrowserWindow | null = null;
 let miniWindow: BrowserWindow | null = null;
 let udpSocket: dgram.Socket | null = null;
 let currentCameraIp: string | null = null;
+let downloadDirectory = '';
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -80,6 +81,11 @@ function createMiniWindow() {
 }
 
 app.whenReady().then(() => {
+  downloadDirectory = path.join(app.getPath('pictures'), 'Lumix');
+  if (!fs.existsSync(downloadDirectory)) {
+    fs.mkdirSync(downloadDirectory, { recursive: true });
+  }
+
   createMainWindow();
 
   app.on('activate', () => {
@@ -171,14 +177,16 @@ ipcMain.handle('get-thumbnail', async (_event, targetUrl: string, cacheKey: stri
 });
 
 ipcMain.handle('download-file', async (_event, fileUrl: string, fileName: string) => {
-  const picturesPath = app.getPath('pictures');
-  const lumixDir = path.join(picturesPath, 'Lumix');
-  
-  if (!fs.existsSync(lumixDir)) {
-    fs.mkdirSync(lumixDir, { recursive: true });
+  if (!downloadDirectory) {
+    downloadDirectory = path.join(app.getPath('pictures'), 'Lumix');
   }
 
-  const filePath = path.join(lumixDir, fileName);
+  if (!fs.existsSync(downloadDirectory)) {
+    fs.mkdirSync(downloadDirectory, { recursive: true });
+  }
+
+  const safeName = path.basename(fileName);
+  const filePath = path.join(downloadDirectory, safeName);
 
   return new Promise((resolve, reject) => {
     console.log(`Starting download from ${fileUrl} to ${filePath}`);
@@ -303,4 +311,103 @@ ipcMain.handle('set-camera-ip', (_event, ip: string) => {
 
 ipcMain.handle('get-camera-ip', () => {
   return currentCameraIp;
+});
+
+ipcMain.handle('get-download-directory', () => {
+  if (!downloadDirectory) {
+    downloadDirectory = path.join(app.getPath('pictures'), 'Lumix');
+  }
+  return downloadDirectory;
+});
+
+ipcMain.handle('set-download-directory', (_event, dirPath: string) => {
+  if (!dirPath) return downloadDirectory;
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+  downloadDirectory = dirPath;
+  return downloadDirectory;
+});
+
+ipcMain.handle('choose-download-directory', async () => {
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+    title: 'Select download folder',
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath: downloadDirectory || path.join(app.getPath('pictures'), 'Lumix'),
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const selected = result.filePaths[0];
+  if (!fs.existsSync(selected)) {
+    fs.mkdirSync(selected, { recursive: true });
+  }
+  downloadDirectory = selected;
+  return selected;
+});
+
+ipcMain.handle('check-local-files', (_event, fileNames: string[]) => {
+  const existing: Record<string, string> = {};
+  if (!downloadDirectory || !Array.isArray(fileNames) || fileNames.length === 0) {
+    return existing;
+  }
+
+  for (const name of fileNames) {
+    const safeName = path.basename(name);
+    const filePath = path.join(downloadDirectory, safeName);
+    if (fs.existsSync(filePath)) {
+      existing[name] = filePath;
+    }
+  }
+
+  return existing;
+});
+
+ipcMain.handle('read-local-image-data-url', (_event, filePath: string) => {
+  if (!filePath) {
+    throw new Error('Missing file path');
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+  const buf = fs.readFileSync(filePath);
+  return `data:${mime};base64,${buf.toString('base64')}`;
+});
+
+ipcMain.handle('open-local-path', async (_event, filePath: string) => {
+  if (!filePath) {
+    throw new Error('Missing file path');
+  }
+
+  const openResult = await shell.openPath(filePath);
+  if (openResult) {
+    throw new Error(openResult);
+  }
+  return true;
+});
+
+ipcMain.handle('delete-local-file', (_event, filePath: string) => {
+  if (!filePath) {
+    throw new Error('Missing file path');
+  }
+
+  if (!fs.existsSync(filePath)) {
+    return true;
+  }
+
+  fs.unlinkSync(filePath);
+  return true;
+});
+
+ipcMain.handle('show-error-dialog', async (_event, title: string, message: string) => {
+  await dialog.showMessageBox(mainWindow ?? undefined, {
+    type: 'error',
+    title: title || 'Error',
+    message: title || 'Error',
+    detail: message || 'Unknown error',
+    buttons: ['OK'],
+  });
+  return true;
 });

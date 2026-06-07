@@ -42,6 +42,15 @@ async function callDlna(action: string, body: string) {
   });
 }
 
+function escapeXml(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   setCameraIp: (ip: string) => {
     cameraIp = ip;
@@ -114,6 +123,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
       
       return await ipcRenderer.invoke('download-file', url, fileName);
   },
+  deleteRemoteContent: async (contentId: string) => {
+    const body = `<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+<u:DestroyObject xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+<ObjectID>${escapeXml(contentId)}</ObjectID>
+</u:DestroyObject>
+</s:Body>
+</s:Envelope>`;
+    return callDlna('"urn:schemas-upnp-org:service:ContentDirectory:1#DestroyObject"', body);
+  },
+  deleteLocalFile: (filePath: string) => ipcRenderer.invoke('delete-local-file', filePath),
+  showErrorDialog: (title: string, message: string) => ipcRenderer.invoke('show-error-dialog', title, message),
+  getDownloadDirectory: () => ipcRenderer.invoke('get-download-directory'),
+  setDownloadDirectory: (dirPath: string) => ipcRenderer.invoke('set-download-directory', dirPath),
+  chooseDownloadDirectory: () => ipcRenderer.invoke('choose-download-directory'),
+  checkLocalFiles: (fileNames: string[]) => ipcRenderer.invoke('check-local-files', fileNames),
+  readLocalImageDataUrl: (filePath: string) => ipcRenderer.invoke('read-local-image-data-url', filePath),
+  openLocalPath: (filePath: string) => ipcRenderer.invoke('open-local-path', filePath),
   mini: {
     open: () => ipcRenderer.invoke('mini.open'),
     close: () => ipcRenderer.invoke('mini.close'),

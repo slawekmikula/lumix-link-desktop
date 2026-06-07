@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CameraState, XmlEntry } from './types';
 import { parseState, xmlToEntries, formatDuration } from './utils';
-import { useLibrary, LibraryGrid } from './Library';
+import { useLibrary, LibraryGrid, type ContentItem } from './Library';
 
 const tabs = [
   { id: 'main', label: 'Main' },
@@ -172,6 +172,7 @@ function KeyValueGrid({ entries }: { entries: XmlEntry[] }) {
 function App() {
   const library = useLibrary();
   const [showLibrary, setShowLibrary] = useState(false);
+  const [localPreview, setLocalPreview] = useState<{ fileName: string; filePath: string; dataUrl: string } | null>(null);
   
   const [ipHistory, setIpHistory] = useState<string[]>(() => {
     try {
@@ -237,6 +238,10 @@ function App() {
   useEffect(() => {
     window.electronAPI.setCameraIp(cameraIp);
   }, [cameraIp]);
+
+  useEffect(() => {
+    library.initDownloadDirectory();
+  }, []);
 
   useEffect(() => () => stopFocusRepeat(), []);
 
@@ -528,6 +533,74 @@ function App() {
 
   const openMini = () => {
     window.electronAPI.mini.open();
+  };
+
+  const reinitializePreviewStream = async () => {
+    if (!streamUrl) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      await window.electronAPI.stopUdpListener();
+      await window.electronAPI.startStream();
+      await window.electronAPI.startUdpListener();
+      setStreamUrl('UDP Stream Active');
+      await refreshState();
+      setStatus(`Connected to ${cameraIp}/${netmask}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setStatus('Preview reconnect failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLibraryToggle = async () => {
+    if (showLibrary) {
+      setShowLibrary(false);
+      setLocalPreview(null);
+      await reinitializePreviewStream();
+      return;
+    }
+
+    setShowLibrary(true);
+  };
+
+  const handleViewLocal = async (item: ContentItem) => {
+    if (!item.localPath) return;
+    try {
+      if (item.filetype.toLowerCase() === 'mp4') {
+        await window.electronAPI.openLocalPath(item.localPath);
+        return;
+      }
+
+      const dataUrl = await window.electronAPI.readLocalImageDataUrl(item.localPath);
+      setLocalPreview({
+        fileName: item.filename,
+        filePath: item.localPath,
+        dataUrl,
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const openInSystemViewer = async () => {
+    if (!localPreview) return;
+    try {
+      await window.electronAPI.openLocalPath(localPreview.filePath);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const openDownloadDirectory = async () => {
+    if (!library.downloadDir) return;
+    try {
+      await window.electronAPI.openLocalPath(library.downloadDir);
+    } catch (err) {
+      setError((err as Error).message);
+    }
   };
 
   useEffect(() => {
@@ -880,6 +953,54 @@ function App() {
                 >
                   {library.loading ? "Scanning..." : "Scan Camera"}
                 </button>
+                <button
+                  onClick={library.chooseDownloadDirectory}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "4px",
+                    background: "#334155",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Folder
+                </button>
+                <button
+                  onClick={library.toggleSortDirection}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "4px",
+                    background: "#1f2937",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {library.sortBasis === 'date' ? 'Date' : 'Number'}: {library.sortDirection === 'asc' ? 'Oldest' : 'Newest'}
+                </button>
+                {library.downloadDir && (
+                  <button
+                    onClick={openDownloadDirectory}
+                    style={{
+                      padding: 0,
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      maxWidth: '280px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: '#93c5fd',
+                      fontSize: '12px',
+                      textDecoration: 'underline',
+                    }}
+                    title={library.downloadDir}
+                  >
+                    {library.downloadDir}
+                  </button>
+                )}
               </div>
             ) : (
               <p className="stream-info">
@@ -899,17 +1020,22 @@ function App() {
               {viewMode === 'width' ? 'Fit Height' : 'Fit Width'}
             </button>
             )}
-            <button onClick={() => setShowLibrary(s => !s)}>{showLibrary ? 'Back' : 'Library'}</button>
+            <button onClick={handleLibraryToggle}>{showLibrary ? 'Back' : 'Library'}</button>
             <button onClick={openMini}>Mini Panel</button>
           </div>
         </div>
         {showLibrary ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0, flex: 1 }}>
             <LibraryGrid 
               items={library.items} 
               loading={library.loading} 
               downloading={library.downloading} 
-              handleDownload={library.handleDownload} 
+              deleting={library.deleting}
+              handleDownload={library.handleDownload}
+              handleDelete={library.handleDelete}
+              onViewLocal={handleViewLocal}
             />
+          </div>
         ) : previewUrl ? (
           <div 
             className="preview-frame"
@@ -937,6 +1063,61 @@ function App() {
           </div>
         ) : (
           <div className="preview-placeholder">Start stream to view live feed</div>
+        )}
+
+        {localPreview && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(2,6,23,0.72)',
+              zIndex: 9999,
+              display: 'grid',
+              placeItems: 'center',
+              padding: '24px',
+            }}
+            onClick={() => setLocalPreview(null)}
+          >
+            <div
+              style={{
+                width: 'min(1000px, 95vw)',
+                height: 'min(760px, 90vh)',
+                border: '1px solid #1e3550',
+                borderRadius: '12px',
+                background: '#081726',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{localPreview.fileName}</strong>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={openInSystemViewer}>Open in default app</button>
+                  <button onClick={() => setLocalPreview(null)}>Close</button>
+                </div>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  background: '#000',
+                  borderRadius: '8px',
+                  display: 'grid',
+                  placeItems: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={localPreview.dataUrl}
+                  alt={localPreview.fileName}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

@@ -27,6 +27,15 @@ declare global {
       browseDlna(objectId: string, start: number, count: number): Promise<string>;
       getThumbnail(fileName: string): Promise<string>;
       downloadGeneric(contentId: string, fileName: string, customUrl?: string): Promise<string>;
+      deleteRemoteContent(contentId: string): Promise<string>;
+      deleteLocalFile(filePath: string): Promise<boolean>;
+      showErrorDialog(title: string, message: string): Promise<boolean>;
+      getDownloadDirectory(): Promise<string>;
+      setDownloadDirectory(dirPath: string): Promise<string>;
+      chooseDownloadDirectory(): Promise<string | null>;
+      checkLocalFiles(fileNames: string[]): Promise<Record<string, string>>;
+      readLocalImageDataUrl(filePath: string): Promise<string>;
+      openLocalPath(filePath: string): Promise<boolean>;
       mini: {
         open(): Promise<boolean>;
         close(): Promise<boolean>;
