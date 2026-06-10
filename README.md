@@ -1,6 +1,6 @@
 # Lumix Link Desktop
 
-A desktop application for controlling and monitoring Panasonic Lumix cameras over Wi-Fi. This project is a fork and extension of the original [Lumix Link](https://github.com/lostcauze7/lumix-link) work, adding new features, improvements, and a rebuilt desktop shell using Electron.
+A desktop application for controlling and monitoring Panasonic Lumix cameras over Wi-Fi. This project is a fork and extension of the original [Lumix Link](https://github.com/peci1/lumix-link-desktop) work, adding new features, improvements, and a rebuilt desktop shell using Electron.
 
 Built with **Electron + React + Vite + TypeScript**.
 

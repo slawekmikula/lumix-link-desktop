@@ -1,6 +1,6 @@
 {
   "name": "lumix-link-desktop",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "description": "Electron + React + Vite control and live view for Panasonic Lumix cameras",
   "author": {
     "name": "Lumix Link Desktop Team",
