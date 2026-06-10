@@ -4,6 +4,7 @@ dist
 dist-electron
 .dist
 .dist-electron
+release
 
 # Editors
 .vscode

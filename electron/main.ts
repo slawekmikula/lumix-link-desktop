@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, Menu, type MenuItemConstructorOptions, type OpenDialogOptions, type MessageBoxOptions } from 'electron';
 import path from 'node:path';
 import url from 'node:url';
 import dgram from 'node:dgram';
@@ -15,6 +15,41 @@ let downloadDirectory = '';
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
+function createApplicationMenu() {
+  const menuTemplate: MenuItemConstructorOptions[] = [];
+
+  if (process.platform === 'darwin') {
+    menuTemplate.push({
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    });
+  }
+
+  menuTemplate.push({
+    label: 'Help',
+    submenu: [
+      {
+        label: 'Website',
+        click: () => {
+          void shell.openExternal('https://github.com/slawekmikula/lumix-link-desktop');
+        },
+      },
+    ],
+  });
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -30,9 +65,9 @@ function createMainWindow() {
   });
 
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL(VITE_DEV_SERVER_URL);
+    mainWindow.loadURL(`${VITE_DEV_SERVER_URL}/public/index.html`);
   } else {
-    const indexPath = url.pathToFileURL(path.join(__dirname, '../dist/index.html')).toString();
+    const indexPath = url.pathToFileURL(path.join(__dirname, '../dist/public/index.html')).toString();
     mainWindow.loadURL(indexPath);
   }
 
@@ -69,7 +104,7 @@ function createMiniWindow() {
 
   const target = process.env.NODE_ENV === 'development'
     ? `${VITE_DEV_SERVER_URL}/mini.html`
-    : url.pathToFileURL(path.join(__dirname, '../dist/mini.html')).toString();
+    : url.pathToFileURL(path.join(__dirname, '../dist/public/mini.html')).toString();
 
   miniWindow.loadURL(target);
 
@@ -86,6 +121,7 @@ app.whenReady().then(() => {
     fs.mkdirSync(downloadDirectory, { recursive: true });
   }
 
+  createApplicationMenu();
   createMainWindow();
 
   app.on('activate', () => {
@@ -330,11 +366,15 @@ ipcMain.handle('set-download-directory', (_event, dirPath: string) => {
 });
 
 ipcMain.handle('choose-download-directory', async () => {
-  const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+  const dialogOptions: OpenDialogOptions = {
     title: 'Select download folder',
     properties: ['openDirectory', 'createDirectory'],
     defaultPath: downloadDirectory || path.join(app.getPath('pictures'), 'Lumix'),
-  });
+  };
+
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
 
   if (result.canceled || result.filePaths.length === 0) {
     return null;
@@ -402,12 +442,18 @@ ipcMain.handle('delete-local-file', (_event, filePath: string) => {
 });
 
 ipcMain.handle('show-error-dialog', async (_event, title: string, message: string) => {
-  await dialog.showMessageBox(mainWindow ?? undefined, {
+  const dialogOptions: MessageBoxOptions = {
     type: 'error',
     title: title || 'Error',
     message: title || 'Error',
     detail: message || 'Unknown error',
     buttons: ['OK'],
-  });
+  };
+
+  if (mainWindow) {
+    await dialog.showMessageBox(mainWindow, dialogOptions);
+  } else {
+    await dialog.showMessageBox(dialogOptions);
+  }
   return true;
 });
